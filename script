@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+#
+# Here's a markdown link: [Google](www.google.com)!
+#
+# command: toolchain-build-console:install: "Install and start the toolchain's build console"
+#
+# usage: rerun toolchain-build-console:install 
+#
+# rerun env variables: RERUN, RERUN_VERSION, RERUN_MODULES, RERUN_MODULE_DIR
+# option variables: 
+
+# Read module function library.
+. $RERUN_MODULE_DIR/lib/functions.sh || { 
+  echo >&2 "Failed loading function library." ; exit 1 ; 
+}
+
+# Error handling
+# ---------------
+# * Trap calls `rerun_die` with standard message.
+# * Exit upon command errors or accessing unset variables.
+#   * See [set](http://ss64.com/bash/set.html)
+trap 'rerun_die "*** command failed: toolchain-build-console:install. ***"' ERR
+set -o nounset -o pipefail
+
+# Parse the command options.
+[[ -r $RERUN_MODULE_DIR/commands/install/options.sh ]] && {
+    . $RERUN_MODULE_DIR/commands/install/options.sh || rerun_die "Failed loading options parser."
+    rerun_options_parse "$@"
+}
+
+
+# ------------------------------
+# Your implementation goes here.
+# ------------------------------
+
+TOOLCHAIN_ROOT=$(git rev-parse --show-toplevel)
+
+# Bootstrap required rerun modules:
+sudo yum -q -y install rerun-jenkins
+sudo yum -q -y install rerun-rpm
+sudo yum -q -y install rerun-apache-maven
+sudo yum -q -y install rerun-jboss-as
+
+# Bootstrap required packages:
+sudo yum -q -y install rpm-build
+sudo yum -q -y install java-devel-openjdk
+sudo yum -q -y install xmlstarlet
+
+# Bootstrap the Maven installation, if necessary:
+if ! rpm -q apache-maven
+then
+  rerun apache-maven:build --version 3.0.4 --directory ${TOOLCHAIN_ROOT}/apache-maven-rpm
+  sudo rpm -Uvh ${TOOLCHAIN_ROOT}/apache-maven-rpm/RPMS/noarch/apache-maven-3.0.4-1.noarch.rpm
+fi
+
+# Bootstrap Jenkins installation:
+rerun jenkins:install
+rerun jenkins:start
+
+rerun jenkins:install-plugin --plugin-name git
+rerun jenkins:install-plugin --plugin-name rundeck
+
+rerun jenkins:add-jdk
+rerun jenkins:add-maven
+rerun jenkins:configure-rundeck-plugin
+
+rerun jenkins:restart
+
+# Bootstrap Jenkins jobs:
+
+for FILE in $(ls -d $TOOLCHAIN_ROOT/jenkins/jobs/*/config.xml)
+do
+  JOBNAME=$(basename $(dirname $FILE))
+  rerun jenkins:create-job --jobname $JOBNAME --file $FILE
+  rerun jenkins:build-now --jobname $JOBNAME
+done
+
+exit $?
+
+# Done
