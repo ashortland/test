@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Here's a markdown link: [Google](www.google.com)!
+# Here's a markdown link: [Google](http://www.google.com)!
 #
 # command: toolchain-build-console:install: "Install and start the toolchain's build console"
 #
